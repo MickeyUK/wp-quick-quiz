@@ -27,7 +27,7 @@ define('WPQQUIZ_FILE', __FILE__);
 /**
  * Plugin slug.
  */
-define('WPQQUIZ_SLUG', 'wpapi');
+define('WPQQUIZ_SLUG', 'wpquiz');
 
 /** 
  * Plugin directory.

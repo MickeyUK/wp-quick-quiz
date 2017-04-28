@@ -19,7 +19,7 @@ class WPQQuiz {
         // Admin hooks
         add_action('admin_enqueue_scripts', array('WPQQuiz','enqueue_scripts'));
         add_action('add_meta_boxes', array('WPQQuiz','meta_box_add'), 10, 2 );
-        add_action('save_post', array('WPQQuiz', 'meta_box_save'));
+        add_action('post_updated', array('WPQQuiz', 'meta_box_save'));
         
         // Frontend hooks
         add_action('wp_enqueue_scripts', array('WPQQuiz','enqueue_scripts'));
@@ -32,19 +32,29 @@ class WPQQuiz {
      */
     public static function enqueue_scripts() {
         
-        // CSS
-        wp_enqueue_style('flipclock-css', plugin_dir_url(WPQQUIZ_FILE).'css/flipclock.css', 
-                array(), null, 'all');
+        // If admin dashboard or single post view
+        if (is_admin() || is_single()) {
         
-        wp_enqueue_style('qquiz-css', plugin_dir_url(WPQQUIZ_FILE).'css/qquiz.css', 
-                array(), null, 'all');
-        
-        // Javascript
-        wp_enqueue_script('flipclock-js',plugin_dir_url(WPQQUIZ_FILE).'js/flipclock.js', 
-                array( 'jquery' ), NULL, true );
-        
-        wp_enqueue_script('qquiz-js',plugin_dir_url(WPQQUIZ_FILE).'js/qquiz.js', 
-                array( 'jquery' ), NULL, true );
+            // Stylesheet for flip clock
+            wp_enqueue_style('flipclock-css', plugin_dir_url(WPQQUIZ_FILE).'css/flipclock.css', 
+                    array(), null, 'all');
+
+            // Stylesheet for quiz and meta boxes
+            wp_enqueue_style('qquiz-css', plugin_dir_url(WPQQUIZ_FILE).'css/qquiz.css', 
+                    array(), null, 'all');
+
+            // Dash icons for share buttons
+            wp_enqueue_style( 'dashicons' );
+
+            // Javascript for flip clock
+            wp_enqueue_script('flipclock-js',plugin_dir_url(WPQQUIZ_FILE).'js/flipclock.js', 
+                    array( 'jquery' ), NULL, true );
+
+            // Javascript for quiz and meta boxes
+            wp_enqueue_script('qquiz-js',plugin_dir_url(WPQQUIZ_FILE).'js/qquiz.js', 
+                    array( 'jquery' ), NULL, true );
+            
+        }
         
     }
     
@@ -53,11 +63,11 @@ class WPQQuiz {
      */
     public static function meta_box_add() {
         
-        // Settings
+        // Settings meta box
         add_meta_box('qquiz-meta-settings', 'Quick Quiz Settings', 
                 array('WPQQuiz','meta_settings_markup'), null, 'side');
         
-        // Questions
+        // Questions meta box
         add_meta_box('qquiz-meta-questions', 'Quick Quiz Questions',
                 array('WPQQuiz','meta_questions_markup'));
         
@@ -67,14 +77,6 @@ class WPQQuiz {
      * Sanitizes meta box form data and saves it.
      */
     public static function meta_box_save() {
-     
-        // Abort
-        $nonce = $_POST['qquiz-meta-nonce'];
-        if (!isset($nonce) ||
-            !wp_verify_nonce( $nonce, 'qquiz-meta' )) {
-            print 'Sorry, your nonce did not verify.';
-            exit;
-        }
 
         // Questions
         $questions = array();
@@ -146,8 +148,8 @@ class WPQQuiz {
         // Questions
         $questions = get_post_meta($post->ID, "qquiz-questions", true);
         
+        // List
         echo '<div id="qquiz-meta-questions-list">';
-        
         if (empty($questions)) {
             
             // No existing questions
@@ -155,6 +157,7 @@ class WPQQuiz {
             
         } else { 
             
+            // For each question and answer
             foreach($questions as $question => $answer) {
             ?>
             
@@ -173,7 +176,7 @@ class WPQQuiz {
                 
                 <div class="qquiz-meta-field-delete">
                     <p class="hide-if-no-js" id="qquiz-add-question">
-                        <a class="button" href="#" onclick="event.preventDefault(); deleteQQuestion(this);">Remove</a>
+                        <a class="button" href="#" onclick="event.preventDefault(); qQuizMetaDelete(this);">Remove</a>
                     </p>
                 </div>
             </div>
@@ -187,7 +190,7 @@ class WPQQuiz {
         
         // Add question button
         echo '<p class="hide-if-no-js" id="qquiz-add-question">';
-        echo '<a class="button" href="#" onclick="event.preventDefault(); addQQuestion()">Add Question</a>';
+        echo '<a class="button" href="#" onclick="event.preventDefault(); qQuizMetaAdd()">Add Question</a>';
         echo '</p>';
         
     }
@@ -202,61 +205,84 @@ class WPQQuiz {
      */
     public static function the_content($content) {
         
+        // Post object
         global $post;
         
-        // Check for quiz content
-        $questions = get_post_meta($post->ID,'qquiz-questions', true);
-        if (!empty($questions)) {
-            
-            // Settings
-            $time = get_post_meta($post->ID,'qquiz-time', true);
-            $dist = get_post_meta($post->ID,'qquiz-dist', true);
-            
-            $content .= '<script>';
-                $content .= 'var quizTime = '.((empty($time)) ? '240' : $time).';';
-                $content .= 'var quizDist = '.((empty($dist)) ? '2' : $dist).';';
-                $content .= 'var qQuizCount = '.count($questions).';';
-                $content .= 'var qQuizCorrect = 0;';
-            $content .= '</script>';
-            
-            // Summary box
-            $content .= '<div id="qquiz-summary">';
-            $content .= '<h2 class="">Quiz Over</h2>';
-            $content .= '<div class="qquiz-stats"></div>';
-            $content .= '</div>';
-            
-            // Control box
-            $content .= '<div class="qquiz-control">';
-                $content .= '<div id="qquiz-timer"></div>';
-                $content .= '<button class="qquiz-start" onclick="startQQuiz()">Start Quiz</button>';
-            $content .= '</div>';
-            
-            // Quiz container
-            $content .= '<div class="qquiz-content">';
-            
-            // Questions
-            foreach($questions as $question => $answer) {
+        // Check single view
+        if (is_single()) {
+        
+            // Check for quiz content
+            $questions = get_post_meta($post->ID,'qquiz-questions', true);
+            if (!empty($questions)) {
+
+                // Settings
+                $time = get_post_meta($post->ID,'qquiz-time', true);
+                $dist = get_post_meta($post->ID,'qquiz-dist', true);
+
+                // Javascript variables
+                $content .= '<script>';
+                    $content .= 'var qQuizTime = '.((empty($time)) ? '240' : $time).';';
+                    $content .= 'var qQuizDist = '.((empty($dist)) ? '2' : $dist).';';
+                    $content .= 'var qQuizCount = '.count($questions).';';
+                    $content .= 'var qQuizCorrect = 0;';
+                $content .= '</script>';
                 
-                $content .= '<div class="qquiz-container">';
-                
-                // Question
-                $content .= '<div class="qquiz-question"><label>';
-                $content .= stripslashes($question);
-                $content .= '</label></div>';
-                
-                // Answer
-                $content .= '<div class="qquiz-answer">';
-                    $content .= '<input type="text" onkeyup="checkQAnswer(this,\'';
-                    $content .= base64_encode(stripslashes($answer));
-                    $content .= '\')"/>';
+                // Share results
+                if (isset($_GET['player'])) {
+                    $player = base64_decode($_GET['player']);
+                    $arr = explode(',',$player);
+                    $content .= '<div id="qquiz-player">';
+                        $content .= '<h2>Your friend scored:</h2>';
+                        $content .= '<span class="qquiz-label">Correct Answers: </span>';
+                        $content .= '<span class="qquiz-value">'.$arr[0].'/'.count($questions).'</span><br>';
+                        $content .= '<span class="qquiz-label">Time Taken: </span>';
+                        $content .= '<span class="qquiz-value">'.$arr[1].'</span>';
+                        $content .= '<br><br><p><i>Try the quiz yourself below!</i></p>';
+                    $content .= '</div>';
+                }
+
+                // Summary box
+                $content .= '<div id="qquiz-summary">';
+                    $content .= '<h2 class="">Quiz Over</h2>';
+                    $content .= '<div class="qquiz-stats"></div><br>';
+                    $content .= '<p><strong>Share results:</strong></p>';
+                    $content .= '<div id="qquiz-social"></div>';
                 $content .= '</div>';
-                
+
+                // Control box
+                $content .= '<div class="qquiz-control">';
+                    $content .= '<div id="qquiz-timer"></div>';
+                    $content .= '<button class="qquiz-start" onclick="qQuizStart()">Start Quiz</button>';
                 $content .= '</div>';
-                
+
+                // Quiz container
+                $content .= '<div class="qquiz-content">';
+
+                // Questions
+                foreach($questions as $question => $answer) {
+
+                    $content .= '<div class="qquiz-container">';
+
+                    // Question
+                    $content .= '<div class="qquiz-question"><label>';
+                    $content .= stripslashes($question);
+                    $content .= '</label></div>';
+
+                    // Answer
+                    $content .= '<div class="qquiz-answer">';
+                        $content .= '<input type="text" onkeyup="qQuizCheck(this,\'';
+                        $content .= base64_encode(stripslashes($answer));
+                        $content .= '\')"/>';
+                    $content .= '</div>';
+
+                    $content .= '</div>';
+
+                }
+
+                // End table
+                $content .= '</div>';
+
             }
-            
-            // End table
-            $content .= '</div>';
             
         }
         

@@ -1,57 +1,33 @@
 
-var qQuizClock, qQuizTimeout;
-var qQuizIdleTime = 1; // Time before answer check (in seconds)
+/* global qQuizTime, qQuizDist, qQuizCorrect, qQuizCount */
 
 /**
- * Adds a question in the questions metabox.
+ * Quiz Quiz
  * 
- * @returns {void}
+ * A WordPress plugin by Michael Dearman.
  */
-function addQQuestion() {
-    
-    // Remove 'no questions yet' paragraph.
-    jQuery('#qquiz-no-questions').remove();
-    
-    // Markup for question field
-    var html = '<div class="qquiz-meta-fieldset">';
-    
-        // Question
-        html += '<div class="qquiz-meta-field-question">';
-            html += '<p><strong>Question</strong><br>';
-            html += '<input type="text" class="regular-text" name="qquiz-questions[]">';
-        html += '</div>';
-        
-        // Answer
-        html += '<div class="qquiz-meta-field-answer">';
-            html += '<p><strong>Answer</strong><br>';
-            html += '<input type="text" class="regular-text" name="qquiz-answers[]">';
-        html += '</div>';
-        
-        // Delete
-        html += '<div class="qquiz-meta-field-delete">';
-            html += '<p class="hide-if-no-js" id="qquiz-add-question">';
-            html += '<a class="button" href="#" onclick="event.preventDefault(); deleteQQuestion(this);">Remove</a>';
-            html += '</p>';
-        html += '</div>';
-        
-    html += '</div>';
-    
-    // Append
-    jQuery('#qquiz-meta-questions-list').append(html);
-    
-    // Fade in
-    jQuery('.qquiz-meta-fieldset').fadeIn("fast");
-    
-}
+
+/** The digital clock element. */
+var qQuizClock;
+
+/** The timeout instance. */
+var qQuizTimeout;
+
+/** Time idle before checking answer (in seconds) */
+var qQuizIdleTime = 1;
 
 /**
  * Starts the quiz.
  * 
  * @returns {void}
  */
-function startQQuiz() {
+function qQuizStart() {
     
+    // Document finished loading
     jQuery(document).ready(function() {
+    
+        // Remove player score
+        jQuery('#qquiz-player').fadeOut(100, function() { jQuery('.qquiz-start').remove(); });
     
         // Remove start button
         jQuery('.qquiz-start').fadeOut(100, function() { jQuery('.qquiz-start').remove(); });
@@ -67,14 +43,14 @@ function startQQuiz() {
             callbacks: {
                 stop: function() {
                     setTimeout(function(){
-                        stopQQuiz();
+                        qQuizStop();
                     },2000); 
                 }
             }
         });
 
         // Set clock time
-        qQuizClock.setTime(quizTime);
+        qQuizClock.setTime(qQuizTime);
       
         // 1 second delay before clock start
         setTimeout(function(){
@@ -90,11 +66,18 @@ function startQQuiz() {
  * 
  * @returns {void}
  */
-function stopQQuiz() {
+function qQuizStop() {
+    
+    // Summary
+    qQuizStat('Correct Answers',qQuizCorrect + " / " + qQuizCount);
+    qQuizStat('Time Taken',secondsToHMS(qQuizTime - qQuizClock.getTime()));
     
     // Fade out quiz and timer
     jQuery('#qquiz-timer').fadeOut(300, function() { jQuery('.qquiz-content').remove(); });
     jQuery('.qquiz-content').fadeOut(300, function() { jQuery('.qquiz-content').remove(); });
+    
+    // Social icons
+    qQuizShareIcons();
     
     // Fade in summary
     jQuery('#qquiz-summary').fadeIn('slow');
@@ -104,17 +87,17 @@ function stopQQuiz() {
 /**
  * Checks an inputted answer.
  * 
- * @param {object} The question input element.
- * @param {string} The correct answer.
+ * @param {object} element The question input element.
+ * @param {string} answer The correct answer.
  */
-function checkQAnswer(element,ans) {
+function qQuizCheck(element,answer) {
     
     // Remove shake effect
     jQuery(element).removeClass('qquiz-wrong');
     
     // Get question and answer
     var guess = jQuery(element).val();
-    var ans = atob(ans);
+    var ans = atob(answer);
     
     // Pause before check
     clearTimeout(qQuizTimeout);
@@ -122,7 +105,7 @@ function checkQAnswer(element,ans) {
         
         // Check levenshtein distance
         if (jQuery(element).not('[readonly]') && 
-                getEditDistance(guess.toLowerCase(),ans.toLowerCase()) <= quizDist) {
+                getEditDistance(guess.toLowerCase(),ans.toLowerCase()) <= qQuizDist) {
             
             // Correct!
             qQuizCorrect ++;
@@ -136,11 +119,7 @@ function checkQAnswer(element,ans) {
             jQuery(element).addClass('qquiz-correct');
             
             // Check if quiz complete
-            if (qQuizCorrect == qQuizCount) {
-                
-                // Summary
-                statQQuiz('Correct Answers',qQuizCorrect + " / " + qQuizCount);
-                statQQuiz('Time Taken',secondsToHMS(quizTime - qQuizClock.getTime()));
+            if (qQuizCorrect === qQuizCount) {
                 
                 // Stop quiz
                 qQuizClock.stop();
@@ -171,7 +150,7 @@ function checkQAnswer(element,ans) {
  * @param {string} value The value for the stat.
  * @returns {void}
  */
-function statQQuiz(label,value) {
+function qQuizStat(label,value) {
     
     var html = '<span class="qquiz-label">'+label+': </span>';
     html += '<span class="qquiz-value">'+value+'</span><br>';
@@ -180,11 +159,84 @@ function statQQuiz(label,value) {
 }
 
 /**
+ * Appends share buttons to qquiz-social div.
+ * 
+ * @returns {void}
+ */
+function qQuizShareIcons() {
+    
+    // Score
+    var time = secondsToHMS(qQuizTime - qQuizClock.getTime());
+    var player = qQuizCorrect + "," + time;
+    var code = btoa(player);
+    
+    // URL
+    var url = window.location.href + "?player=" + code;
+    
+    // Twitter
+    var twitter = '<a class="qquiz-twitter" href="';
+    twitter += encodeURI('https://twitter.com/intent/tweet?text=Check out my score!&url='+url);
+    twitter += '"><button><i class="dashicons dashicons-twitter"></i> Tweet</button></a>';
+    jQuery('#qquiz-social').append(twitter);
+    
+    // Facebook
+    var facebook = '<a class="qquiz-facebook" href="';
+    facebook += encodeURI('https://www.facebook.com/sharer/sharer.php?u='+url);
+    facebook += '"><button><i class="dashicons dashicons-facebook"></i> Facebook</button></a>';
+    jQuery('#qquiz-social').append(facebook);
+    
+}
+
+/**
+ * Adds a question in the questions metabox.
+ * 
+ * @param {string} question
+ * @param {answer} answer
+ * @returns {void}
+ */
+function qQuizMetaAdd(question='',answer='') {
+    
+    // Remove 'no questions yet' paragraph.
+    jQuery('#qquiz-no-questions').remove();
+    
+    // Markup for question field
+    var html = '<div class="qquiz-meta-fieldset">';
+    
+        // Question
+        html += '<div class="qquiz-meta-field-question">';
+            html += '<p><strong>Question</strong><br>';
+            html += '<input value="'+question+'" type="text" class="regular-text" name="qquiz-questions[]">';
+        html += '</div>';
+        
+        // Answer
+        html += '<div class="qquiz-meta-field-answer">';
+            html += '<p><strong>Answer</strong><br>';
+            html += '<input value="'+answer+'" type="text" class="regular-text" name="qquiz-answers[]">';
+        html += '</div>';
+        
+        // Delete
+        html += '<div class="qquiz-meta-field-delete">';
+            html += '<p class="hide-if-no-js" id="qquiz-add-question">';
+            html += '<a class="button" href="#" onclick="event.preventDefault(); qQuizMetaDelete(this);">Remove</a>';
+            html += '</p>';
+        html += '</div>';
+        
+    html += '</div>';
+    
+    // Append
+    jQuery('#qquiz-meta-questions-list').append(html);
+    
+    // Fade in
+    jQuery('.qquiz-meta-fieldset').fadeIn("fast");
+    
+}
+
+/**
  * Deletes a question from the meta box.
  * 
- * @param {object} The delete button element.
+ * @param {object} element The delete button element.
  */
-function deleteQQuestion(element) {
+function qQuizMetaDelete(element) {
     var par = jQuery(element).parent().parent().parent();
     jQuery(par).fadeOut(300, function() { jQuery(par).remove(); });
 }
